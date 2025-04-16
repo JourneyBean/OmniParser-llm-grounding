@@ -1,5 +1,28 @@
 # OmniParser: Screen Parsing tool for Pure Vision Based GUI Agent
 
+# 接入视觉大模型方式
+
+## 跑 gradio demo
+
+```shell
+export OPENAI_MODEL="qwen-vl-max"
+export OPENAI_KEY="sk-1234"
+export OPENAI_BASE="https://xxxxxxxxxx/api"
+python ./gradio_demo.py
+```
+
+## 跑 API 服务器
+
+```shell
+export OPENAI_MODEL="qwen-vl-max"
+export OPENAI_KEY="sk-1234"
+export OPENAI_BASE="https://xxxxxxxxxx/api"
+cd ./omnitool/omniparserserver
+python ./omniparserserver.py
+```
+
+<hr/>
+
 <p align="center">
   <img src="imgs/logo.png" alt="Logo">
 </p>

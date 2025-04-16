@@ -8,7 +8,43 @@ import json
 import requests
 # utility function
 import os
-from openai import AzureOpenAI
+from openai import OpenAI
+from io import BytesIO
+
+client = OpenAI(
+    api_key=os.environ["OPENAI_KEY"],
+    base_url=os.environ["OPENAI_BASE"],
+)
+
+def chat(image: Image) -> str:
+    # Convert PIL Image to base64
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    
+    # Create API request
+    completion = client.chat.completions.create(
+        model=os.environ["OPENAI_MODEL"],
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that describes images in short words."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image in short words."},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/png;base64,{image_b64}"
+                    }}
+                ]
+            }
+        ],
+        max_tokens=300
+    )
+    response = completion.choices[0].message.content
+    print(response)
+    return response
 
 import json
 import sys
@@ -89,33 +125,30 @@ def get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_
             xmin, xmax = int(coord[0]*image_source.shape[1]), int(coord[2]*image_source.shape[1])
             ymin, ymax = int(coord[1]*image_source.shape[0]), int(coord[3]*image_source.shape[0])
             cropped_image = image_source[ymin:ymax, xmin:xmax, :]
-            cropped_image = cv2.resize(cropped_image, (64, 64))
+            # cropped_image = cv2.resize(cropped_image, (64, 64))
             croped_pil_image.append(to_pil(cropped_image))
         except:
             continue
 
-    model, processor = caption_model_processor['model'], caption_model_processor['processor']
-    if not prompt:
-        if 'florence' in model.config.name_or_path:
-            prompt = "<CAPTION>"
-        else:
-            prompt = "The image shows"
     
     generated_texts = []
-    device = model.device
     for i in range(0, len(croped_pil_image), batch_size):
         start = time.time()
         batch = croped_pil_image[i:i+batch_size]
         t1 = time.time()
-        if model.device.type == 'cuda':
-            inputs = processor(images=batch, text=[prompt]*len(batch), return_tensors="pt", do_resize=False).to(device=device, dtype=torch.float16)
-        else:
-            inputs = processor(images=batch, text=[prompt]*len(batch), return_tensors="pt").to(device=device)
-        if 'florence' in model.config.name_or_path:
-            generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
-        else:
-            generated_ids = model.generate(**inputs, max_length=100, num_beams=5, no_repeat_ngram_size=2, early_stopping=True, num_return_sequences=1) # temperature=0.01, do_sample=True,
-        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # request to vision llm
+        # Generate descriptions for the current batch
+        generated_text = []
+        for image in batch:
+            try:
+                # Get description from OpenAI API
+                description = chat(image)
+                generated_text.append(description)
+            except Exception as e:
+                print(f"Error processing image: {str(e)}")
+                generated_text.append("")  # Add empty string on failure
+
         generated_text = [gen.strip() for gen in generated_text]
         generated_texts.extend(generated_text)
     
